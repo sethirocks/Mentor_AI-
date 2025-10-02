@@ -81,9 +81,9 @@ Students submit information via a web form:
 
 #### 3. Unified Knowledge Base
 
-- Combines both sources (critical knowledge + scraped content)
-- Schema: `topic`, `semester`, `source`, `content`
-- Enables downstream modules to access curated insights
+- Combines both sources (critical insider knowledge + scraped content)
+- Unified schema: `topic`, `semester`, `source`, `content`
+- Serves as a single point of truth for downstream modules
 
 #### 4. AI Chatbot (Discovery Feed)
 
@@ -100,13 +100,14 @@ Students submit information via a web form:
 
 - Uses only student-submitted tips
 - Visual map: parent node = semester, child nodes = categorized tips
-- Implemented using Obsidian (via plugin or markdown link mapping)
+- Built using **D3.js** or **Cytoscape.js** for in-browser interactive rendering 
 
 #### 6. Conflict Detection Engine (Phase 2)
 
-- Flags topic inconsistencies from different sources
-- Logged with metadata (topic, values, source URLs, status)
-- For manual review and future dashboard
+- Detects conflicting values (e.g., two exam deadlines) from different official pages  
+- Uses regex and string-matching to compare content  
+- Logs inconsistencies in structured format (JSON) with topic, values, sources, and status  
+- Future goal: flag to user or show in review dashboard  
 
 ---
 
