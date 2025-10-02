@@ -1,4 +1,4 @@
-# Mentor_AI–
+# Mentor_AI
 
 AI-powered roadmap & assistant for students to discover important university knowledge they don’t know they need.
 
@@ -54,7 +54,7 @@ Tasks are created and assigned via GitHub Issues, with status updates managed th
 
 ## Technical Setup
 
-Mentor_AI is designed to act as a personalized assistant for university students by combining peer-submitted tips with official university information. T
+Mentor_AI is designed to act as a personalized assistant for university students by combining peer-submitted tips with official university information. 
 ### Tech Stack Overview
 
 - Frontend: Static HTML/CSS/JS with embedded form and chatbot UI
