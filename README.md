@@ -57,21 +57,21 @@ Tasks are created and assigned via GitHub Issues, with status updates managed th
 Mentor_AI is designed to act as a personalized assistant for university students by combining peer-submitted tips with official university information. T
 ### Tech Stack Overview
 
-- **Frontend**: Static HTML/CSS/JS with embedded student tip form  
-- **Backend**: Python (FastAPI or Flask)  
-- **LLM Integration**: OpenAI API (e.g., GPT 3.5/4) via HTTPS requests  
-- **Database**: ChromaDB (lightweight vector store)  
-- **Scraping**: BeautifulSoup + Requests (official h-da.de only)  
-- **Visualization**: Obsidian mind map (via API or markdown export)  
-- **Conflict Detection**: Phase 2 feature to flag contradictory information  
+- Frontend: Static HTML/CSS/JS with embedded form and chatbot UI
+- Backend: Python (FastAPI) REST API
+- LLM Integration: OpenAI GPT-4 Turbo via API
+- Database: MongoDB Atlas (Free Tier, up to 512MB)
+- Scraping: BeautifulSoup + Requests (official h-da.de only)
+- Visualization: D3.js / Cytoscape.js (interactive network graph)
+- Conflict Detection: Phase 2 module to flag contradictory entries 
 
 ### System Modules
 
-#### 1. Student Tip Collection
+#### 1. Critical Insider Knowledge Collection
 
 Students submit information via a web form:
-- Fields: semester, issue type, tip description
-- Tips are parsed and stored in a structured format for downstream use
+- Students submit info via web form (semester, issue type, description)
+- Data stored in MongoDB with tags for downstream use
 
 #### 2. Web Scraper
 
@@ -81,7 +81,7 @@ Students submit information via a web form:
 
 #### 3. Unified Knowledge Base
 
-- Combines both sources (tips + scraped content)
+- Combines both sources (critical knowledge + scraped content)
 - Schema: `topic`, `semester`, `source`, `content`
 - Enables downstream modules to access curated insights
 
@@ -104,10 +104,9 @@ Students submit information via a web form:
 
 #### 6. Conflict Detection Engine (Phase 2)
 
-- If two entries refer to the same topic but differ in content:
-  - Entry is flagged for contradiction
-  - Can be shown to users or logged for review
-  - Helps address information asymmetry from unofficial vs. official sources
+- Flags topic inconsistencies from different sources
+- Logged with metadata (topic, values, source URLs, status)
+- For manual review and future dashboard
 
 ---
 
