@@ -112,5 +112,6 @@ Students submit information via a web form:
 ---
 
 ### High-Level Data Flow
+<img width="664" height="266" alt="Screenshot 2025-10-01 at 16 10 09" src="https://github.com/user-attachments/assets/084ed527-1f7f-47e4-9234-08a99f5c1a87" />
 
 
