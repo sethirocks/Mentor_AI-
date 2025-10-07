@@ -24,29 +24,6 @@ We use branches, pull requests, and GitHub Projects to organize tasks.
 
 Each team member uses their preferred IDE (e.g., **PyCharm** or **VS Code**).  
 Tasks are created and assigned via GitHub Issues, with status updates managed through the GitHub Project Board.
-
-# Mentor_AI–
-
-AI-powered roadmap & assistant for students to discover important university knowledge they don’t know they need.
-
-## 🗂 Organizational Structure
-
-This project is organized across three main tools:
-
-### 📦 GitHub Repository
-Source code, scripts, documentation, and issue tracking are maintained here.  
-We use branches, pull requests, and GitHub Projects to organize tasks.
-
----
-
-### 📄 Google Docs  
-[Shared document for writing research notes, planning, meeting summaries, and discussion of ideas](https://docs.google.com/document/d/1y1kVfFjQbXq8OdFGCSOu9GP_EXO3aulRecfcXGN_ks/edit?usp=sharing)
-
----
-
-### 💬 Discord Server  
-[Main channel for team communication, quick updates, screen sharing, and daily coordination](https://discord.gg/p9fqusES)
-
 ---
 
 Each team member uses their preferred IDE (e.g., **PyCharm** or **VS Code**).  
@@ -114,4 +91,15 @@ Students submit information via a web form:
 ### High-Level Data Flow
 <img width="664" height="266" alt="Screenshot 2025-10-01 at 16 10 09" src="https://github.com/user-attachments/assets/084ed527-1f7f-47e4-9234-08a99f5c1a87" />
 
+-----
+## Evaluation Criteria
+
+| General Engagement (Github) | Coding Strength | Team Competence | Reliability / Punctuality | 1st Presentation | 2nd Presentation | 3rd Presentation | Overall Satisfaction of Result | Written Project Report | Final Grade |
+|-----------------------------|-----------------|------------------|---------------------------|------------------|------------------|------------------|---------------------------------|------------------------|-------------|
+| 50 %                        | 50 %            | 50 %             | 50 %                      | 25 %             | 25 %             | 25 %             | 25 %                            |                        |             |
+|                             |                 |                  |                           |                  |                  |                  |                                 |                        |             |
+| Σ engagement & coding 2×50 %|                 | Team comp. & reliability 2×50 % |                   | Σ pres. & overall satisfaction 4×25 % | | | | | |
+| 33 %                        |                 | 33 %             |                           | 33 %             |                  |                  |                                 |                        |             |
+|                             |                 |                  |                           |                  |                  |                  |                                 | Σ presentation & project report 2×50 % | |
+|                             |                 |                  |                           |                  |                  |                  |                                 |                        | **100 %**   |
 
