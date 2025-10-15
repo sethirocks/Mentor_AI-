@@ -91,17 +91,6 @@ Students submit information via a web form:
 ### High-Level Data Flow
 <img width="664" height="266" alt="Screenshot 2025-10-01 at 16 10 09" src="https://github.com/user-attachments/assets/084ed527-1f7f-47e4-9234-08a99f5c1a87" />
 
------
-## Evaluation Criteria
-
-| General Engagement (Github) | Coding Strength | Team Competence | Reliability / Punctuality | 1st Presentation | 2nd Presentation | 3rd Presentation | Overall Satisfaction of Result | Written Project Report | Final Grade |
-|-----------------------------|-----------------|------------------|---------------------------|------------------|------------------|------------------|---------------------------------|------------------------|-------------|
-| 50 %                        | 50 %            | 50 %             | 50 %                      | 25 %             | 25 %             | 25 %             | 25 %                            |                        |             |
-|                             |                 |                  |                           |                  |                  |                  |                                 |                        |             |
-| Σ engagement & coding 2×50 %|                 | Team comp. & reliability 2×50 % |                   | Σ pres. & overall satisfaction 4×25 % | | | | | |
-| 33 %                        |                 | 33 %             |                           | 33 %             |                  |                  |                                 |                        |             |
-|                             |                 |                  |                           |                  |                  |                  |                                 | Σ presentation & project report 2×50 % | |
-|                             |                 |                  |                           |                  |                  |                  |                                 |                        | **100 %**   |
 
 backend/
  ├── app/
