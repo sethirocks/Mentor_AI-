@@ -1,3 +1,4 @@
+#health check endpoint
 from fastapi import APIRouter, HTTPException
 from app.core import mongo  # import the module, not 'db'
 

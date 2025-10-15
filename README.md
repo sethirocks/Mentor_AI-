@@ -103,3 +103,12 @@ Students submit information via a web form:
 |                             |                 |                  |                           |                  |                  |                  |                                 | Σ presentation & project report 2×50 % | |
 |                             |                 |                  |                           |                  |                  |                  |                                 |                        | **100 %**   |
 
+backend/
+ ├── app/
+ │    ├── api/v1/routes_health.py     → health check endpoint
+ │    ├── core/config.py              → loads .env settings
+ │    ├── core/mongo.py               → MongoDB connection
+ │    └── main.py                     → FastAPI entrypoint
+ ├── requirements.txt                 → backend dependencies
+ ├── .env.example                     → sample environment file
+ └── tests/                           → test folder (empty for now)
