@@ -1,17 +1,17 @@
-#MongoDB connection
-from motor.motor_asyncio import AsyncIOMotorClient
-from .config import settings
+from pymongo import MongoClient
+from dotenv import load_dotenv
+import os
 
-client: AsyncIOMotorClient | None = None
-db = None
+load_dotenv()
 
-async def connect_to_mongo():
-    global client, db
-    client = AsyncIOMotorClient(settings.MONGO_URI)
-    db = client[settings.MONGO_DB]
-    await db.command("ping")
+MONGO_URI = os.getenv("MONGO_URI")
+MONGO_DB = os.getenv("MONGO_DB", "mentor_ai")
 
-async def close_mongo_connection():
-    global client
-    if client:
-        client.close()
+client = MongoClient(MONGO_URI)
+db = client[MONGO_DB]
+
+def connect_to_mongo():
+    return db
+
+def close_mongo_connection():
+    client.close()
