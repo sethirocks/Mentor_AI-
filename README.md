@@ -91,13 +91,17 @@ Students submit information via a web form:
 ### High-Level Data Flow
 <img width="664" height="266" alt="Screenshot 2025-10-01 at 16 10 09" src="https://github.com/user-attachments/assets/084ed527-1f7f-47e4-9234-08a99f5c1a87" />
 
-
 backend/
  ├── app/
- │    ├── api/v1/routes_health.py     → health check endpoint
- │    ├── core/config.py              → loads .env settings
- │    ├── core/mongo.py               → MongoDB connection
- │    └── main.py                     → FastAPI entrypoint
- ├── requirements.txt                 → backend dependencies
- ├── .env.example                     → sample environment file
- └── tests/                           → test folder (empty for now)
+ │    ├── api/v1/
+ │    │    ├── routes_health.py     → health check
+ │    │    ├── routes_chat.py       → POST /chat
+ │    │    ├── routes_insights.py   → POST /insights
+ │    │    └── routes_scrape.py     → POST /scrape
+ │    ├── core/
+ │    │    ├── config.py
+ │    │    └── mongo.py
+ │    └── main.py                   → FastAPI entrypoint
+ ├── requirements.txt
+ ├── .env.example
+ └── tests/                         → (empty for now)
