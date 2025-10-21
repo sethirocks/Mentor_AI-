@@ -30,8 +30,11 @@ class ScrapedPage(BaseModel):
         "json_encoders": {ObjectId: str},
     }
 
+    # ---------- Mongo helpers ----------
+
     @classmethod
     def from_mongo(cls, data: dict) -> "ScrapedPage":
+        """Convert a MongoDB document into a ScrapedPage instance."""
         if not data:
             raise ValueError("No data provided to instantiate ScrapedPage")
         mongo_data = data.copy()
@@ -40,7 +43,21 @@ class ScrapedPage(BaseModel):
         return cls(**mongo_data)
 
     def to_mongo(self) -> dict:
+        """Convert the Pydantic model into a MongoDB-safe dictionary."""
         payload = self.model_dump(by_alias=True)
+
+        # remove _id if it's None
         if payload.get("_id") is None:
             payload.pop("_id", None)
+
+        # ✅ force url to be stored as plain string
+        if "url" in payload and not isinstance(payload["url"], str):
+            payload["url"] = str(payload["url"])
+
+        # ✅ ensure all list/dict fields are serializable
+        if "metadata" in payload and isinstance(payload["metadata"], dict):
+            payload["metadata"] = {
+                str(k): v for k, v in payload["metadata"].items()
+            }
+
         return payload

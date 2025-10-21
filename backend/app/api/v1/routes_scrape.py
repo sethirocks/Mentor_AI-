@@ -39,10 +39,11 @@ def scrape(request: ScrapeRequest) -> ScrapeResponse:
     try:
         normalized = normalize_url(str(request.url))
         pages = scrape_section(normalized)
-    except Exception as exc:  # pragma: no cover - runtime validation
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     payload: List[ScrapedPageResponse] = []
+
     for page in pages:
         page_payload = ScrapedPageResponse(**page.to_dict())
         payload.append(page_payload)
@@ -51,7 +52,7 @@ def scrape(request: ScrapeRequest) -> ScrapeResponse:
             continue
 
         persisted_page = PersistedScrapedPage(
-            url=str(page_payload.url),
+            url=str(page_payload.url),  # ✅ ensure string type
             title=page_payload.title,
             headings=page_payload.headings,
             paragraphs=page_payload.paragraphs,
@@ -60,12 +61,18 @@ def scrape(request: ScrapeRequest) -> ScrapeResponse:
             source=page_payload.source,
             tags=page_payload.tags,
             retrieved_at=page_payload.retrieved_at,
+            error=page_payload.error,
         )
 
+        # ✅ make sure the filter URL is also a string
         db["scraped_pages"].update_one(
-            {"url": persisted_page.url},
+            {"url": str(persisted_page.url)},
             {"$set": persisted_page.to_mongo()},
             upsert=True,
         )
 
-    return ScrapeResponse(base_url=normalized, page_count=len(payload), pages=payload)
+    return ScrapeResponse(
+        base_url=normalized,
+        page_count=len(payload),
+        pages=payload,
+    )
