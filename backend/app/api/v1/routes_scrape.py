@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Dict, List, Optional, Union
+import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field, HttpUrl
 from app.core.mongo import db
 from app.core.scraper import normalize_url, scrape_section
 from app.models import ScrapedPage as PersistedScrapedPage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
@@ -38,6 +41,7 @@ class ScrapeResponse(BaseModel):
 def scrape(request: ScrapeRequest) -> ScrapeResponse:
     try:
         normalized = normalize_url(str(request.url))
+        logger.info(f"[Scraper] Base URL to scrape: {normalized}")
         pages = scrape_section(normalized)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -46,9 +50,11 @@ def scrape(request: ScrapeRequest) -> ScrapeResponse:
 
     for page in pages:
         page_payload = ScrapedPageResponse(**page.to_dict())
+        logger.info(f"↪ Scraped subpage: {page_payload.url}")
         payload.append(page_payload)
 
         if page_payload.error:
+            logger.warning(f"[Scraper] Failed to scrape: {page_payload.url} → {page_payload.error}")
             continue
 
         persisted_page = PersistedScrapedPage(
@@ -70,6 +76,7 @@ def scrape(request: ScrapeRequest) -> ScrapeResponse:
             {"$set": persisted_page.to_mongo()},
             upsert=True,
         )
+        logger.info(f"[Scraper] Saved: {persisted_page.url} to MongoDB")
 
     return ScrapeResponse(
         base_url=normalized,

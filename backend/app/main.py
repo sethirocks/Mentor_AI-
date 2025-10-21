@@ -8,6 +8,17 @@ from app.api.v1.routes_chat import router as chat_router
 from app.api.v1.routes_scrape import router as scrape_router
 from app.api.v1.routes_insights import router as insights_router
 
+import logging
+
+# Configure global logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+logger = logging.getLogger(__name__)
+logger.info("Starting Mentor_AI Backend")
+
 app = FastAPI(title="Mentor_AI Backend", version="v1")
 
 # CORS setup

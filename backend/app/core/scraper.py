@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
@@ -12,6 +14,8 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import requests
 from bs4 import BeautifulSoup
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 10
 USER_AGENT = (
@@ -63,6 +67,7 @@ def scrape_section(base_url: str) -> List[PageContent]:
     """
 
     normalized_base = normalize_url(base_url)
+    logger.info(f"[Scraper] Base URL to scrape: {normalized_base}")
     html = fetch_html(normalized_base)
     subpages = discover_links(normalized_base, html)
 
@@ -71,6 +76,7 @@ def scrape_section(base_url: str) -> List[PageContent]:
         try:
             page_html = fetch_html(link)
         except Exception as exc:  # pragma: no cover - network errors are runtime issues
+            logger.warning(f"[Scraper] Failed to scrape: {link} — {exc}")
             results.append(
                 PageContent(
                     url=link,
@@ -84,6 +90,7 @@ def scrape_section(base_url: str) -> List[PageContent]:
 
         soup = BeautifulSoup(page_html, "html.parser")
         page = parse_page(link, soup)
+        logger.info(f"[Scraper] Successfully scraped: {link}")
         results.append(page)
 
     return results
@@ -123,6 +130,7 @@ def discover_links(base_url: str, html: str) -> List[str]:
         if not parsed.path.startswith(allowed_prefix):
             continue
         if candidate not in discovered:
+            logger.info(f"  ↪ Found subpage: {candidate}")
             discovered.add(candidate)
 
     return sorted(discovered)
