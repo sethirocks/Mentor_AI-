@@ -3,23 +3,26 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from bson import ObjectId
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 
 
 class ScrapedPage(BaseModel):
     """Represents the persisted structure for scraped web pages."""
 
     id: Optional[str] = Field(default=None, alias="_id")
-    url: str
-    html: str
-    content: Optional[str] = None
+    url: HttpUrl
+    title: Optional[str] = None
+    headings: List[str] = Field(default_factory=list)
+    paragraphs: List[str] = Field(default_factory=list)
+    content: str = ""
+    metadata: Dict[str, Union[List[str], str]] = Field(default_factory=dict)
     source: Optional[str] = None
-    metadata: Dict[str, str] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    error: Optional[str] = None
 
     model_config = {
         "populate_by_name": True,

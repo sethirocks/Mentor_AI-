@@ -1,10 +1,12 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, HttpUrl
 
+from app.core.mongo import db
 from app.core.scraper import normalize_url, scrape_section
+from app.models import ScrapedPage as PersistedScrapedPage
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
@@ -13,13 +15,13 @@ class ScrapeRequest(BaseModel):
     url: HttpUrl = Field(description="Base URL from the h-da website to crawl")
 
 
-class ScrapedPage(BaseModel):
+class ScrapedPageResponse(BaseModel):
     url: HttpUrl
     title: Optional[str] = None
     headings: List[str] = Field(default_factory=list)
     paragraphs: List[str] = Field(default_factory=list)
     content: str = ""
-    metadata: dict = Field(default_factory=dict)
+    metadata: Dict[str, Union[List[str], str]] = Field(default_factory=dict)
     source: str
     tags: List[str] = Field(default_factory=list)
     retrieved_at: datetime
@@ -29,7 +31,7 @@ class ScrapedPage(BaseModel):
 class ScrapeResponse(BaseModel):
     base_url: HttpUrl
     page_count: int
-    pages: List[ScrapedPage]
+    pages: List[ScrapedPageResponse]
 
 
 @router.post("")
@@ -40,5 +42,30 @@ def scrape(request: ScrapeRequest) -> ScrapeResponse:
     except Exception as exc:  # pragma: no cover - runtime validation
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    payload = [ScrapedPage(**page.to_dict()) for page in pages]
+    payload: List[ScrapedPageResponse] = []
+    for page in pages:
+        page_payload = ScrapedPageResponse(**page.to_dict())
+        payload.append(page_payload)
+
+        if page_payload.error:
+            continue
+
+        persisted_page = PersistedScrapedPage(
+            url=str(page_payload.url),
+            title=page_payload.title,
+            headings=page_payload.headings,
+            paragraphs=page_payload.paragraphs,
+            content=page_payload.content,
+            metadata=page_payload.metadata,
+            source=page_payload.source,
+            tags=page_payload.tags,
+            retrieved_at=page_payload.retrieved_at,
+        )
+
+        db["scraped_pages"].update_one(
+            {"url": persisted_page.url},
+            {"$set": persisted_page.to_mongo()},
+            upsert=True,
+        )
+
     return ScrapeResponse(base_url=normalized, page_count=len(payload), pages=payload)
