@@ -3,11 +3,10 @@ from pydantic import BaseModel
 from app.core.mongo import db
 from app.core.config import settings
 from openai import OpenAI
-import os
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# Initialize the new OpenAI client
+# Initialize the OpenAI client
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 class ChatRequest(BaseModel):
@@ -16,6 +15,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     model_used: str
+    used_fallback: bool  # Indicates if fallback logic was triggered
 
     class Config:
         protected_namespaces = ()
@@ -31,12 +31,14 @@ def chat(request: ChatRequest):
     query = {"$or": regex_filters}
     matched_pages = list(scraped_pages_collection.find(query).limit(2))
 
-    # Step 2: Build context text
+    used_fallback = len(matched_pages) == 0  # True if no documents matched
+
+    # Step 2: Build context text (if any matched)
     context_blocks = []
     for page in matched_pages:
         title = page.get("title", "")
         content = page.get("content", "")
-        block = f"Title: {title}\nContent: {content[:1000]}" #- Truncates content to 1000 characters per matched page. Prevents context overflow in GPT prompt
+        block = f"Title: {title}\nContent: {content[:1000]}"
         context_blocks.append(block)
 
     context = "\n\n".join(context_blocks)
@@ -50,7 +52,7 @@ def chat(request: ChatRequest):
             f"Question: {question}"
         )
     else:
-        prompt = question
+        prompt = question  # fallback: GPT gets no context
 
     try:
         response = client.chat.completions.create(
@@ -65,7 +67,11 @@ def chat(request: ChatRequest):
         answer = response.choices[0].message.content.strip()
         model_used = response.model
 
-        return ChatResponse(answer=answer, model_used=model_used)
+        return ChatResponse(
+            answer=answer,
+            model_used=model_used,
+            used_fallback=used_fallback
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
