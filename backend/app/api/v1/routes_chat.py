@@ -108,13 +108,23 @@ def chat(request: ChatRequest):
     # Step 3: Construct prompt
     if context:
         prompt = (
-            "You are a helpful assistant that answers student questions using official university information.\n\n"
-            "Use the following documents to answer the question. Be concise and accurate. If unsure, say so.\n\n"
+            "You are a helpful assistant that answers questions about Hochschule Darmstadt (h_da) using official university information.\n\n"
+            "Use the following documents from h-da.de to answer the question. Be concise and accurate. "
+            "If the answer is not in the documents, say so.\n\n"
             f"{context}\n\n"
             f"Question: {question}"
         )
     else:
-        prompt = question  # fallback: GPT gets no context
+        # When no context available, instruct GPT to decline politely
+        prompt = (
+            "You are a helpful assistant for Hochschule Darmstadt (h_da) university.\n\n"
+            "The user asked a question, but no relevant information was found in the h-da.de database.\n\n"
+            "Politely inform the user: 'I'm sorry, but I don't have information about [their topic] in the h_da database. "
+            "I can only answer questions about Hochschule Darmstadt based on information from h-da.de, such as study programs, "
+            "admissions, orientation semesters, campus life, and university services. Feel free to ask about the university!'\n\n"
+            f"User's question: {question}\n\n"
+            "Respond politely following the format above."
+        )
 
     # Step 4: Send prompt to GPT model
     try:
