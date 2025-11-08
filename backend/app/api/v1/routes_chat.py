@@ -36,14 +36,19 @@ def chat(request: ChatRequest):
     for page in matched_pages:
         title = page.get("title", "")
         content = page.get("content", "")
-        block = f"Title: {title}\nContent: {content[:1000]}"
+        block = f"Title: {title}\nContent: {content[:1000]}" #- Truncates content to 1000 characters per matched page. Prevents context overflow in GPT prompt
         context_blocks.append(block)
 
     context = "\n\n".join(context_blocks)
 
     # Step 3: Construct prompt
     if context:
-        prompt = f"Answer the following question using the provided university documents.\n\n{context}\n\nQuestion: {question}"
+        prompt = (
+            "You are a helpful assistant that answers student questions using official university information.\n\n"
+            "Use the following documents to answer the question. Be concise and accurate. If unsure, say so.\n\n"
+            f"{context}\n\n"
+            f"Question: {question}"
+        )
     else:
         prompt = question
 
