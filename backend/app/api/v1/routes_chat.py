@@ -109,10 +109,12 @@ def chat(request: ChatRequest):
     # Determine if fallback is needed (no matches in either collection)
     used_fallback = len(matched_pages) == 0 and len(matched_insights) == 0
 
-    # Step 3: Build context text from scraped pages
-    context_blocks = []
+    # Step 3: Build context text - separate official documents and insights
+    official_docs = []
+    insights_context = []
     sources_used = []
 
+    # Build official documents section
     for page in matched_pages:
         title = page.get("title", "")
         content = page.get("content", "")
@@ -122,27 +124,40 @@ def chat(request: ChatRequest):
         # Combine content and paragraphs for better context
         full_content = f"{content}\n{paragraphs}" if paragraphs else content
         block = f"Title: {title}\nContent: {full_content[:1000]}"
-        context_blocks.append(block)
+        official_docs.append(block)
         sources_used.append(url or title)
 
-    # Step 4: Add insights to context
+    # Build insights section
     for insight in matched_insights:
         topic = insight.get("topic", "")
         content = insight.get("content", "")
         source = insight.get("source", "insight")
 
-        block = f"Insight on '{topic}':\n{content}"
-        context_blocks.append(block)
+        block = f"Topic: {topic}\n{content}"
+        insights_context.append(block)
         sources_used.append(f"Insight: {topic}" if not source else source)
 
-    context = "\n\n---\n\n".join(context_blocks)
+    # Combine with clear section headers
+    context_parts = []
 
-    # Step 5: Construct prompt
+    if official_docs:
+        context_parts.append("=== OFFICIAL UNIVERSITY DOCUMENTS ===\n\n" + "\n\n---\n\n".join(official_docs))
+
+    if insights_context:
+        context_parts.append("=== CRITICAL INSIDER INSIGHTS ===\n\n" + "\n\n---\n\n".join(insights_context))
+
+    context = "\n\n\n".join(context_parts)
+
+    # Step 5: Construct prompt with enhanced instructions
     if context:
         prompt = (
-            "You are a helpful assistant that answers questions about Hochschule Darmstadt (h_da) using official university information and insights.\n\n"
-            "Use the following documents and insights from h-da.de to answer the question. Be concise and accurate. "
-            "If the answer is not in the documents or insights, say so.\n\n"
+            "You are a helpful assistant that answers questions about Hochschule Darmstadt (h_da).\n\n"
+            "You have access to TWO types of information:\n"
+            "1. Official university documents from h-da.de (marked as OFFICIAL UNIVERSITY DOCUMENTS)\n"
+            "2. Critical insider insights from students, advisors, and staff (marked as CRITICAL INSIDER INSIGHTS)\n\n"
+            "Use BOTH official university documents and critical insider insights to provide comprehensive, accurate answers. "
+            "When insights provide additional context or practical advice beyond official information, include it. "
+            "Be concise and accurate. If the answer is not in the provided information, say so.\n\n"
             f"{context}\n\n"
             f"Question: {question}"
         )
