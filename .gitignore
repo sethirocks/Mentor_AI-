@@ -9,3 +9,6 @@ backend/.env
 # Mac & IDE
 .DS_Store
 .idea/
+
+# ChromaDB vector store
+backend/app/vector_db/
