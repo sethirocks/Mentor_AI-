@@ -5,6 +5,7 @@ from app.core.vector_store import chroma_client
 from openai import OpenAI
 from typing import Optional, List
 import logging
+import os
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -86,21 +87,22 @@ def chat(request: ChatRequest):
 
     # Step 2: Search ChromaDB for semantically similar documents
     try:
-        logger.debug("Searching vector database...")
+        logger.info("Searching vector database...")
         results = chroma_collection.query(
             query_embeddings=[query_embedding],
             n_results=5,  # Get top 5 most relevant chunks
             include=["documents", "metadatas", "distances"]
         )
 
-        logger.info(f"Vector search found {len(results['ids'][0])} results")
+        logger.info("Vector Search Results:")
+        logger.info(f"   Found {len(results['ids'][0])} results")
 
-        # Debug: Log relevance scores
+        # Debug: Show relevance scores
         for i, (doc_id, distance) in enumerate(zip(results['ids'][0], results['distances'][0])):
             metadata = results['metadatas'][0][i]
             doc_type = metadata.get('type', 'unknown')
             title_or_topic = metadata.get('title') or metadata.get('topic', 'N/A')
-            logger.debug(f"Result {i + 1}: distance={distance:.4f}, type={doc_type}, title={title_or_topic}")
+            logger.info(f"   {i+1}. Distance: {distance:.4f} | Type: {doc_type} | {title_or_topic}")
 
     except Exception as e:
         logger.error(f"Error querying ChromaDB: {e}")
@@ -121,7 +123,7 @@ def chat(request: ChatRequest):
     relevant_count = 0
     for i, distance in enumerate(results['distances'][0]):
         if distance > RELEVANCE_THRESHOLD:
-            logger.debug(f"Skipping result {i + 1}: distance={distance:.4f} exceeds threshold")
+            logger.debug(f"Skipping result {i+1}: distance={distance:.4f} exceeds threshold")
             continue
 
         relevant_count += 1
@@ -135,7 +137,7 @@ def chat(request: ChatRequest):
             chunk_idx = metadata.get('chunk_index', 0)
             total_chunks = metadata.get('total_chunks', 1)
 
-            block = f"Title: {title}\nChunk {chunk_idx + 1}/{total_chunks}\nContent: {document}"
+            block = f"Title: {title}\nChunk {chunk_idx+1}/{total_chunks}\nContent: {document}"
             official_docs.append(block)
 
             # Add source only once per URL
@@ -156,27 +158,19 @@ def chat(request: ChatRequest):
             if source_label not in sources_used:
                 sources_used.append(source_label)
 
-    print(f"\n Relevance Summary:")
-    print(f"   Relevant docs (< {RELEVANCE_THRESHOLD}): {relevant_count}")
-    print(f"   Official docs: {len(official_docs)}")
-    print(f"   Insights: {len(insights_context)}")
-    print(f"   Unique sources: {len(sources_used)}")
+    logger.debug(f"Relevance Summary: {relevant_count} relevant results, fallback={len(official_docs) == 0 and len(insights_context) == 0}")
 
     # Combine context with section headers
     context_parts = []
-
     if official_docs:
         context_parts.append("=== OFFICIAL UNIVERSITY DOCUMENTS ===\n\n" + "\n\n---\n\n".join(official_docs))
-
     if insights_context:
         context_parts.append("=== CRITICAL INSIDER INSIGHTS ===\n\n" + "\n\n---\n\n".join(insights_context))
 
     context = "\n\n\n".join(context_parts)
-
-    # Determine fallback
     used_fallback = len(official_docs) == 0 and len(insights_context) == 0
 
-    print(f"   Fallback mode: {used_fallback}")
+    logger.debug(f"Fallback mode: {used_fallback}")
 
     # Step 4: Construct prompt
     if context:
@@ -205,7 +199,7 @@ def chat(request: ChatRequest):
 
     # Step 5: Send to GPT
     try:
-        logger.debug(f"Generating response with {settings.OPENAI_MODEL}...")
+        logger.info(f"Generating response with {settings.OPENAI_MODEL}...")
         response = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
             messages=[
