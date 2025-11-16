@@ -1,15 +1,32 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.core.mongo import db
 from app.core.config import settings
+from app.core.vector_store import chroma_client
 from openai import OpenAI
-import re
 from typing import Optional, List
+import logging
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 # Initialize the OpenAI client
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
+
+# Embedding model configuration
+EMBEDDING_MODEL = getattr(settings, 'OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')
+
+# Get ChromaDB collection
+try:
+    chroma_collection = chroma_client.get_or_create_collection(
+        name="hda_documents",
+        metadata={"description": "H_DA scraped pages and insights with embeddings"}
+    )
+    logger.info("ChromaDB collection initialized successfully")
+except Exception as e:
+    logger.error(f"Could not initialize ChromaDB collection: {e}")
+    chroma_collection = None
 
 
 # Request & Response Models
@@ -20,124 +37,132 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     model_used: str
-    used_fallback: bool  # Indicates if fallback logic was triggered
-    sources_used: Optional[List[str]] = None  # include URLs/titles of used sources
+    used_fallback: bool
+    sources_used: Optional[List[str]] = None
 
     class Config:
         protected_namespaces = ()
 
 
+def get_embedding(text: str) -> list:
+    """Generate embedding for query using OpenAI"""
+    try:
+        response = client.embeddings.create(
+            model=EMBEDDING_MODEL,
+            input=text
+        )
+        return response.data[0].embedding
+    except Exception as e:
+        logger.error(f"Error generating embedding: {e}")
+        return None
+
+
 # Chat Route
 @router.post("", response_model=ChatResponse)
 def chat(request: ChatRequest):
-    """Chat endpoint that uses GPT + scraped MongoDB context + insights to answer user queries."""
+    """Chat endpoint using vector similarity search + GPT for semantic RAG"""
     question = request.message.strip()
 
-    # Clean the question: remove punctuation before splitting
-    cleaned_question = re.sub(r'[^\w\s]', ' ', question.lower())
+    logger.info(f"Received chat request: {question[:100]}...")
 
-    # Remove common stop words and filter meaningful keywords
-    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'is', 'are', 'was', 'were',
-                  'with', 'from', 'by', 'about', 'tell', 'me', 'what'}
-    keywords = [word for word in cleaned_question.split() if word.strip() and word not in stop_words and len(word) > 2]
+    # Check if ChromaDB is available
+    if not chroma_collection:
+        logger.error("Vector store not available")
+        raise HTTPException(
+            status_code=500,
+            detail="Vector store not available. Please run indexing script first."
+        )
 
-    # DEBUG: Print to see what's happening
-    print(f"Question: {question}")
-    print(f"Keywords extracted: {keywords}")
+    # Step 1: Generate embedding for the query
+    logger.debug("Generating query embedding...")
+    query_embedding = get_embedding(question)
 
-    # Step 1: Retrieve relevant scraped pages and insights using filtered keyword regex
-    scraped_pages_collection = db.scraped_pages
-    insights_collection = db.insights
+    if not query_embedding:
+        logger.error("Failed to generate query embedding")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate query embedding"
+        )
 
-    matched_pages = []
-    matched_insights = []
+    # Step 2: Search ChromaDB for semantically similar documents
+    try:
+        logger.debug("Searching vector database...")
+        results = chroma_collection.query(
+            query_embeddings=[query_embedding],
+            n_results=5,  # Get top 5 most relevant chunks
+            include=["documents", "metadatas", "distances"]
+        )
 
-    # Only proceed with query if we have meaningful keywords
-    if keywords and len(keywords) > 0:
-        # Build a flat $or query that searches across ALL relevant fields for scraped pages
-        regex_filters = []
-        for word in keywords:
-            # Search in multiple fields for better coverage
-            regex_filters.append({"title": {"$regex": re.escape(word), "$options": "i"}})
-            regex_filters.append({"content": {"$regex": re.escape(word), "$options": "i"}})
-            regex_filters.append({"url": {"$regex": re.escape(word), "$options": "i"}})
-            regex_filters.append({"headings": {"$regex": re.escape(word), "$options": "i"}})
-            regex_filters.append({"tags": {"$regex": re.escape(word), "$options": "i"}})
-            # For paragraphs array, use $elemMatch
-            regex_filters.append({"paragraphs": {"$elemMatch": {"$regex": re.escape(word), "$options": "i"}}})
+        logger.info(f"Vector search found {len(results['ids'][0])} results")
 
-        # Single $or query - matches if ANY keyword appears in ANY field
-        query = {"$or": regex_filters}
-        print(f"MongoDB Query for scraped_pages: {query}")
+        # Debug: Log relevance scores
+        for i, (doc_id, distance) in enumerate(zip(results['ids'][0], results['distances'][0])):
+            metadata = results['metadatas'][0][i]
+            doc_type = metadata.get('type', 'unknown')
+            title_or_topic = metadata.get('title') or metadata.get('topic', 'N/A')
+            logger.debug(f"Result {i + 1}: distance={distance:.4f}, type={doc_type}, title={title_or_topic}")
 
-        matched_pages = list(scraped_pages_collection.find(query).limit(2))
-        print(f"Matched pages count: {len(matched_pages)}")
+    except Exception as e:
+        logger.error(f"Error querying ChromaDB: {e}")
+        results = {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
 
-        # Step 2: Query insights collection with same keywords
-        insights_regex_filters = []
-        for word in keywords:
-            insights_regex_filters.append({"topic": {"$regex": re.escape(word), "$options": "i"}})
-            insights_regex_filters.append({"content": {"$regex": re.escape(word), "$options": "i"}})
-            insights_regex_filters.append({"tags": {"$regex": re.escape(word), "$options": "i"}})
-
-        insights_query = {"$or": insights_regex_filters}
-        print(f"MongoDB Query for insights: {insights_query}")
-
-        matched_insights = list(insights_collection.find(insights_query).limit(3))
-        print(f"Matched insights count: {len(matched_insights)}")
-
-        # DEBUG: Check what's in the database if no matches
-        if len(matched_pages) == 0 and len(matched_insights) == 0:
-            # Try a broader search to see if ANY documents exist
-            total_docs = scraped_pages_collection.count_documents({})
-            total_insights = insights_collection.count_documents({})
-            print(f"Total documents in scraped_pages collection: {total_docs}")
-            print(f"Total documents in insights collection: {total_insights}")
-
-            # Sample one document to see structure
-            sample_doc = scraped_pages_collection.find_one()
-            if sample_doc:
-                print(f"Sample document fields: {list(sample_doc.keys())}")
-                print(f"Sample title: {sample_doc.get('title', 'N/A')[:100]}")
-                print(f"Sample content preview: {sample_doc.get('content', 'N/A')[:100]}")
-                print(f"Paragraphs type: {type(sample_doc.get('paragraphs'))}")
-                if isinstance(sample_doc.get('paragraphs'), list):
-                    print(
-                        f"First paragraph: {sample_doc.get('paragraphs')[0] if sample_doc.get('paragraphs') else 'Empty list'}")
-                print(f"Headings: {sample_doc.get('headings', 'N/A')}")
-
-    # Determine if fallback is needed (no matches in either collection)
-    used_fallback = len(matched_pages) == 0 and len(matched_insights) == 0
-
-    # Step 3: Build context text - separate official documents and insights
+    # Step 3: Build context from results with relevance filtering
     official_docs = []
     insights_context = []
     sources_used = []
 
-    # Build official documents section
-    for page in matched_pages:
-        title = page.get("title", "")
-        content = page.get("content", "")
-        paragraphs = page.get("paragraphs", "")
-        url = page.get("url", "")
+    # Track unique URLs to avoid duplicates
+    seen_urls = set()
 
-        # Combine content and paragraphs for better context
-        full_content = f"{content}\n{paragraphs}" if paragraphs else content
-        block = f"Title: {title}\nContent: {full_content[:1000]}"
-        official_docs.append(block)
-        sources_used.append(url or title)
+    # Filter results by relevance threshold
+    # Distance < 1.0 is very relevant, < 1.5 is relevant, > 1.5 is questionable
+    RELEVANCE_THRESHOLD = 1.2
 
-    # Build insights section
-    for insight in matched_insights:
-        topic = insight.get("topic", "")
-        content = insight.get("content", "")
-        source = insight.get("source", "insight")
+    relevant_count = 0
+    for i, distance in enumerate(results['distances'][0]):
+        if distance > RELEVANCE_THRESHOLD:
+            logger.debug(f"Skipping result {i + 1}: distance={distance:.4f} exceeds threshold")
+            continue
 
-        block = f"Topic: {topic}\n{content}"
-        insights_context.append(block)
-        sources_used.append(f"Insight: {topic}" if not source else source)
+        relevant_count += 1
+        metadata = results['metadatas'][0][i]
+        document = results['documents'][0][i]
+        doc_type = metadata.get('type', 'unknown')
 
-    # Combine with clear section headers
+        if doc_type == 'page':
+            title = metadata.get('title', 'Untitled')
+            url = metadata.get('url', '')
+            chunk_idx = metadata.get('chunk_index', 0)
+            total_chunks = metadata.get('total_chunks', 1)
+
+            block = f"Title: {title}\nChunk {chunk_idx + 1}/{total_chunks}\nContent: {document}"
+            official_docs.append(block)
+
+            # Add source only once per URL
+            if url and url not in seen_urls:
+                sources_used.append(url)
+                seen_urls.add(url)
+            elif not url and title not in sources_used:
+                sources_used.append(title)
+
+        elif doc_type == 'insight':
+            topic = metadata.get('topic', 'Unknown')
+            source = metadata.get('source', 'insight')
+
+            block = f"Topic: {topic}\n{document}"
+            insights_context.append(block)
+
+            source_label = f"Insight: {topic}" if not source or source == "insight" else source
+            if source_label not in sources_used:
+                sources_used.append(source_label)
+
+    print(f"\n Relevance Summary:")
+    print(f"   Relevant docs (< {RELEVANCE_THRESHOLD}): {relevant_count}")
+    print(f"   Official docs: {len(official_docs)}")
+    print(f"   Insights: {len(insights_context)}")
+    print(f"   Unique sources: {len(sources_used)}")
+
+    # Combine context with section headers
     context_parts = []
 
     if official_docs:
@@ -148,7 +173,12 @@ def chat(request: ChatRequest):
 
     context = "\n\n\n".join(context_parts)
 
-    # Step 5: Construct prompt with enhanced instructions
+    # Determine fallback
+    used_fallback = len(official_docs) == 0 and len(insights_context) == 0
+
+    print(f"   Fallback mode: {used_fallback}")
+
+    # Step 4: Construct prompt
     if context:
         prompt = (
             "You are a helpful assistant that answers questions about Hochschule Darmstadt (h_da).\n\n"
@@ -162,7 +192,7 @@ def chat(request: ChatRequest):
             f"Question: {question}"
         )
     else:
-        # When no context available, instruct GPT to decline politely
+        # Fallback when no relevant context found
         prompt = (
             "You are a helpful assistant for Hochschule Darmstadt (h_da) university.\n\n"
             "The user asked a question, but no relevant information was found in the h-da.de database.\n\n"
@@ -173,8 +203,9 @@ def chat(request: ChatRequest):
             "Respond politely following the format above."
         )
 
-    # Step 6: Send prompt to GPT model
+    # Step 5: Send to GPT
     try:
+        logger.debug(f"Generating response with {settings.OPENAI_MODEL}...")
         response = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
             messages=[
@@ -185,10 +216,10 @@ def chat(request: ChatRequest):
         )
 
         answer = response.choices[0].message.content.strip()
-        model_used = response.model
+        model_used = f"{settings.OPENAI_MODEL} + {EMBEDDING_MODEL}"
 
-        # Step 7: Return grounded response
-        # When fallback is True, sources_used should be None or empty list
+        logger.info(f"Response generated successfully (fallback={used_fallback})")
+
         return ChatResponse(
             answer=answer,
             model_used=model_used,
@@ -197,4 +228,5 @@ def chat(request: ChatRequest):
         )
 
     except Exception as e:
+        logger.error(f"Error calling OpenAI: {e}")
         raise HTTPException(status_code=500, detail=str(e))
