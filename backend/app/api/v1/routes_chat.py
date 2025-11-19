@@ -30,11 +30,8 @@ class ChatResponse(BaseModel):
 # Chat Route
 @router.post("", response_model=ChatResponse)
 def chat(request: ChatRequest):
-    """Chat endpoint that uses GPT + scraped MongoDB context to answer user queries."""
+    """Chat endpoint that uses GPT + scraped MongoDB context + insights to answer user queries."""
     question = request.message.strip()
-
-    # Step 1: Retrieve relevant scraped pages using filtered keyword regex
-    scraped_pages_collection = db.scraped_pages
 
     # Clean the question: remove punctuation before splitting
     cleaned_question = re.sub(r'[^\w\s]', ' ', question.lower())
@@ -48,11 +45,16 @@ def chat(request: ChatRequest):
     print(f"Question: {question}")
     print(f"Keywords extracted: {keywords}")
 
+    # Step 1: Retrieve relevant scraped pages and insights using filtered keyword regex
+    scraped_pages_collection = db.scraped_pages
+    insights_collection = db.insights
+
+    matched_pages = []
+    matched_insights = []
+
     # Only proceed with query if we have meaningful keywords
-    if not keywords:
-        matched_pages = []
-    else:
-        # Build a flat $or query that searches across ALL relevant fields
+    if keywords and len(keywords) > 0:
+        # Build a flat $or query that searches across ALL relevant fields for scraped pages
         regex_filters = []
         for word in keywords:
             # Search in multiple fields for better coverage
@@ -66,16 +68,31 @@ def chat(request: ChatRequest):
 
         # Single $or query - matches if ANY keyword appears in ANY field
         query = {"$or": regex_filters}
-        print(f"MongoDB Query: {query}")
+        print(f"MongoDB Query for scraped_pages: {query}")
 
         matched_pages = list(scraped_pages_collection.find(query).limit(2))
         print(f"Matched pages count: {len(matched_pages)}")
 
-        # DEBUG: Check what's in the database
-        if len(matched_pages) == 0:
+        # Step 2: Query insights collection with same keywords
+        insights_regex_filters = []
+        for word in keywords:
+            insights_regex_filters.append({"topic": {"$regex": re.escape(word), "$options": "i"}})
+            insights_regex_filters.append({"content": {"$regex": re.escape(word), "$options": "i"}})
+            insights_regex_filters.append({"tags": {"$regex": re.escape(word), "$options": "i"}})
+
+        insights_query = {"$or": insights_regex_filters}
+        print(f"MongoDB Query for insights: {insights_query}")
+
+        matched_insights = list(insights_collection.find(insights_query).limit(3))
+        print(f"Matched insights count: {len(matched_insights)}")
+
+        # DEBUG: Check what's in the database if no matches
+        if len(matched_pages) == 0 and len(matched_insights) == 0:
             # Try a broader search to see if ANY documents exist
             total_docs = scraped_pages_collection.count_documents({})
+            total_insights = insights_collection.count_documents({})
             print(f"Total documents in scraped_pages collection: {total_docs}")
+            print(f"Total documents in insights collection: {total_insights}")
 
             # Sample one document to see structure
             sample_doc = scraped_pages_collection.find_one()
@@ -83,14 +100,21 @@ def chat(request: ChatRequest):
                 print(f"Sample document fields: {list(sample_doc.keys())}")
                 print(f"Sample title: {sample_doc.get('title', 'N/A')[:100]}")
                 print(f"Sample content preview: {sample_doc.get('content', 'N/A')[:100]}")
+                print(f"Paragraphs type: {type(sample_doc.get('paragraphs'))}")
+                if isinstance(sample_doc.get('paragraphs'), list):
+                    print(
+                        f"First paragraph: {sample_doc.get('paragraphs')[0] if sample_doc.get('paragraphs') else 'Empty list'}")
+                print(f"Headings: {sample_doc.get('headings', 'N/A')}")
 
-    # FIXED: Fallback is True when no pages matched
-    used_fallback = len(matched_pages) == 0
+    # Determine if fallback is needed (no matches in either collection)
+    used_fallback = len(matched_pages) == 0 and len(matched_insights) == 0
 
-    # Step 2: Build context text (if any matched)
-    context_blocks = []
+    # Step 3: Build context text - separate official documents and insights
+    official_docs = []
+    insights_context = []
     sources_used = []
 
+    # Build official documents section
     for page in matched_pages:
         title = page.get("title", "")
         content = page.get("content", "")
@@ -100,17 +124,40 @@ def chat(request: ChatRequest):
         # Combine content and paragraphs for better context
         full_content = f"{content}\n{paragraphs}" if paragraphs else content
         block = f"Title: {title}\nContent: {full_content[:1000]}"
-        context_blocks.append(block)
+        official_docs.append(block)
         sources_used.append(url or title)
 
-    context = "\n\n".join(context_blocks)
+    # Build insights section
+    for insight in matched_insights:
+        topic = insight.get("topic", "")
+        content = insight.get("content", "")
+        source = insight.get("source", "insight")
 
-    # Step 3: Construct prompt
+        block = f"Topic: {topic}\n{content}"
+        insights_context.append(block)
+        sources_used.append(f"Insight: {topic}" if not source else source)
+
+    # Combine with clear section headers
+    context_parts = []
+
+    if official_docs:
+        context_parts.append("=== OFFICIAL UNIVERSITY DOCUMENTS ===\n\n" + "\n\n---\n\n".join(official_docs))
+
+    if insights_context:
+        context_parts.append("=== CRITICAL INSIDER INSIGHTS ===\n\n" + "\n\n---\n\n".join(insights_context))
+
+    context = "\n\n\n".join(context_parts)
+
+    # Step 5: Construct prompt with enhanced instructions
     if context:
         prompt = (
-            "You are a helpful assistant that answers questions about Hochschule Darmstadt (h_da) using official university information.\n\n"
-            "Use the following documents from h-da.de to answer the question. Be concise and accurate. "
-            "If the answer is not in the documents, say so.\n\n"
+            "You are a helpful assistant that answers questions about Hochschule Darmstadt (h_da).\n\n"
+            "You have access to TWO types of information:\n"
+            "1. Official university documents from h-da.de (marked as OFFICIAL UNIVERSITY DOCUMENTS)\n"
+            "2. Critical insider insights from students, advisors, and staff (marked as CRITICAL INSIDER INSIGHTS)\n\n"
+            "Use BOTH official university documents and critical insider insights to provide comprehensive, accurate answers. "
+            "When insights provide additional context or practical advice beyond official information, include it. "
+            "Be concise and accurate. If the answer is not in the provided information, say so.\n\n"
             f"{context}\n\n"
             f"Question: {question}"
         )
@@ -126,7 +173,7 @@ def chat(request: ChatRequest):
             "Respond politely following the format above."
         )
 
-    # Step 4: Send prompt to GPT model
+    # Step 6: Send prompt to GPT model
     try:
         response = client.chat.completions.create(
             model=settings.OPENAI_MODEL,
@@ -140,8 +187,8 @@ def chat(request: ChatRequest):
         answer = response.choices[0].message.content.strip()
         model_used = response.model
 
-        # Step 5: Return grounded response
-        # FIXED: When fallback is True, sources_used should be None or empty list
+        # Step 7: Return grounded response
+        # When fallback is True, sources_used should be None or empty list
         return ChatResponse(
             answer=answer,
             model_used=model_used,
